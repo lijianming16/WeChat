@@ -1,0 +1,2 @@
+[Sat Mar 02 22:52:58.625136 2019] [core:error] [pid 17368:tid 2152] [client 127.0.0.1:6804] malformed header from script 'xml.php': Bad header: Content-Type=text/xml
+[Sat Mar 02 22:53:01.739652 2019] [core:error] [pid 17368:tid 2152] [client 127.0.0.1:6808] malformed header from script 'xml.php': Bad header: Content-Type=text/xml
