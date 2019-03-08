@@ -1,2 +1,3 @@
 [Sat Mar 02 22:52:58.625136 2019] [core:error] [pid 17368:tid 2152] [client 127.0.0.1:6804] malformed header from script 'xml.php': Bad header: Content-Type=text/xml
 [Sat Mar 02 22:53:01.739652 2019] [core:error] [pid 17368:tid 2152] [client 127.0.0.1:6808] malformed header from script 'xml.php': Bad header: Content-Type=text/xml
+[Thu Mar 07 22:19:27.868871 2019] [core:error] [pid 3720:tid 2104] (20024)The given path is misformatted or contained invalid characters: [client 127.0.0.1:5751] AH00127: Cannot map GET /welcome.phphttp://localhost:8080/webAuth.php HTTP/1.1 to file

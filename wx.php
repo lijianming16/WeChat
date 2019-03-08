@@ -54,23 +54,52 @@ class wx{
             $event = (string)$this->obj->Event;
             // 转为小写
             $event = strtolower($event);
+            // 得到点击事件中点击的是哪个按钮方法
+            $eventKey = (string)$this->obj->EventKey;
+            // 根据openid来查询数据表是否存在此用户
+            $openid = (string)$this->obj->FromUserName;
             // 根据不同的事件类型进行相关的事件处理
             if('click'== $event){
-                // 得到点击事件中点击的是哪个按钮方法
-                $eventKey = (string)$this->obj->EventKey;
                 if('click001'== $eventKey){
                     // 组件sql
                     $sql = "select info from joke order by rand() limit 1";
                     // 执行sql
                     $info = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC)['info'];
                     return $this->createText($info);
-                }else if('click002'== $eventKey){
+                }elseif('click002'== $eventKey){
                     // 组件sql
                     $sql = "select * from material where type='image' order by rand() limit 1";
                     // 执行
                     $media_id = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC)['media'];
                     return $this->createImage($media_id);
                 }
+            }elseif('subscribe' == $event){
+                    // 用户关注
+                // 场景中传过来的数据表中对应用户的ID
+                $user_id = (int)str_replace('qrscene_','',$eventKey);
+                // 添加用户
+                 // 组件sql
+                 $sql = "select openid from user where openid='{$openid}'";
+                 // 执行sql
+                 $res = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC);
+                 if ($res) {
+                    //  数据存在 update
+                    $sql = "update user set dtime=0 where openid='{$openid}'";
+                 }else{
+                     $stime = time();
+                     $sql = "insert into user (openid,pid,stime) values('{$openid}',$user_id,$stime)";
+                 }
+                 $this->db->exec($sql);
+                 return $this->createText("🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹\n\n小主,奴婢在这里恭候多时啦!\n\n🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹🌹");
+            }elseif('unsubscribe' == $event){
+                $dtime = time();
+                $sql = "update user set dtime=$dtime where openid='{$openid}'";
+                $this->db->exec($sql);
+            }elseif ('location' == $event) {
+                $latitude = $this->obj->Latitude;
+                $longitude = $this->obj->Longitude;
+                $sql = "update user set longitude = $longitude,latitude=$latitude where openid='{$openid}'";
+                $this->db->exec($sql);
             }
         }
         /**
@@ -79,20 +108,57 @@ class wx{
          */
         private function textFun(){
             $content = (string)$this->obj->Content;
+		    // 根据openid来查询数据表是否存在此用户
+		    $openid = (string)$this->obj->FromUserName;
             // var_dump($content);
             if(stristr($content,'图文-')){
                 //回复图文
                 return $this->createNews($content);
-            }
-                $sql = "select * from joke where title like '%$content%' order by rand()";
+            }elseif(stristr($content,'笑话-'))
+            {
+                // 截取后几位
+                $str = substr($content,7);
+                $sql = "select * from joke where title like '%$str%' order by rand()";
                 // 执行sql
-                 $title = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC)['info'];
+                 $content = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC)['info'];
                 // 如果为空 回复不存在
-                 if($title == null){
+                if($content == null)
+                {
                     return $this->createText('抱歉,没有此关键词的笑话');
-                }
-                // 响应给公众号服务器
-                return $this->createText($title);
+                }else
+                    {
+                    return $this->createText($content);
+                    }
+            }elseif (stristr($content,'位置-')) 
+            {
+                $sql = "select longitude,latitude from user where openid='{$openid}'";
+                // 执行sql
+                $res = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC);
+                // 搜索关键词
+                $kw = str_replace('位置-','',$content);
+                // 接入高德周边搜索api
+                $url = 'https://restapi.amap.com/v3/place/around?key=6588f5b63ced8d8033b9caf7e9bc8f41&location='.$res['longitude'].','.$res['latitude'].'&keywords='.$kw.'&types=050000&radius=10000&radius=1000&offset=20&page=1&extensions=base';
+                //发送get请求
+                $json = $this->http_request($url);
+                $arr = json_decode($json,true);
+                if (count($arr['pois'])>0) 
+                {
+                    // 查询到结果
+                    $res = $arr['pois'][0];
+                    // 把数组的下标变成变量名
+                    extract($res);
+                    // 查询到结果
+                    $content = "名称：{$name}\n";
+                    $content .= "地址：{$address}\n";
+                    $content .= "距离您的位置：{$distance}米";
+                }else
+                {
+                    $content = '对不起,没有找到相关搜索!😭😭';
+                    
+                } 
+            }
+            // 响应给公众号服务器
+            return $this->createText($content);
         }
         private function imageFun(){
             // $content = (string)$this->obj->Content;
@@ -145,6 +211,52 @@ class wx{
             // 写日志 ,追加日志记录
             file_put_contents('wx.xml',$log,FILE_APPEND);
         }
+        private function http_request(string $url,$data ='',string $filepath = ''){
+            // filepath不为空就表示有文件上传
+            if(!empty($filepath)){
+                $data['media'] = new CURLFile($filepath);
+            }
+            // 初始化curl
+            $link = curl_init();    
+            // 设置curl
+            curl_setopt($link,CURLOPT_URL,$url);
+            // 设置输出的信息不直接输出
+            curl_setopt($link,CURLOPT_RETURNTRANSFER,1);
+            // 取消https的证书验证
+            curl_setopt($link,CURLOPT_SSL_VERIFYPEER,0);
+            curl_setopt($link,CURLOPT_SSL_VERIFYHOST,0);
+            // 设置请求超时时间  单位是秒
+            curl_setopt($link,CURLOPT_TIMEOUT,15);
+            // 伪造一个浏览器型号
+            curl_setopt($link,CURLOPT_USERAGENT,'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36');
+            // 表示有数据上传
+            if(!empty($data)){
+                if(is_string($data)){
+                    // 如果是一个字符串就表示是json
+                    curl_setopt($link,CURLOPT_HTTPHEADER,[
+                            'Content-Type:application/json;charset=utf-8'
+                        ]);
+                }
+                // 告诉curl使用了post请求
+            curl_setopt($link,CURLOPT_POST,1);
+            //post数据
+            curl_setopt($link,CURLOPT_POSTFIELDS,$data);
+            }
+            // 执行curl
+            $data = curl_exec($link);
+            // 得到请求的错误码  0表示成功  大于0就表示请求有异常
+            $error = curl_errno($link);
+            // echo $error;exit;
+            if(0 < $error){
+                // 抛出自己的异常
+                throw new Exception(curl_error($link), 1001);
+                
+            }
+            // 关闭curl
+            curl_close($link);
+            // 返回数据
+            return $data;
+        }
         // 初次接入验证
         private function checkSignature(){
             // 公众平台传过来的数据
@@ -170,5 +282,5 @@ class wx{
 
                 # 验证不通过
                 return '';
-            }  
+            }   
 }
